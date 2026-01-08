@@ -61,7 +61,7 @@
         }
         .api-config {
             display: grid;
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr auto;
             gap: 15px;
             margin-bottom: 15px;
         }
@@ -77,6 +77,26 @@
             outline: none;
             border-color: #3498db;
             box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+        .btn-verify {
+            background: linear-gradient(to right, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+        .btn-verify:hover:not(:disabled) {
+            background: linear-gradient(to right, #2980b9, #1f618d);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
+        }
+        .btn-verify:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
         }
         .api-status {
             padding: 10px;
@@ -96,6 +116,11 @@
             background: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
+        }
+        .status-checking {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
         }
         .model-config {
             display: grid;
@@ -314,6 +339,40 @@
             border-top: 1px solid #ecf0f1;
             padding-top: 15px;
         }
+        .connection-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #6c757d;
+        }
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-dot.online {
+            background-color: #27ae60;
+        }
+        .status-dot.offline {
+            background-color: #e74c3c;
+        }
+        .status-dot.checking {
+            background-color: #f39c12;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -331,11 +390,22 @@
         
         <div class="api-config">
             <input type="password" id="apiKeyInput" class="api-input" placeholder="أدخل مفتاح Google Gemini API هنا..." value="">
+            <button id="verifyApiBtn" class="btn-verify">
+                <i class="fas fa-check-circle"></i> التحقق
+            </button>
         </div>
         
         <div id="apiStatus" class="api-status status-invalid">
             <i class="fas fa-times-circle"></i>
-            <span id="apiStatusText">لم يتم إضافة مفتاح API بعد</span>
+            <span id="apiStatusText">لم يتم التحقق من مفتاح API بعد</span>
+        </div>
+        
+        <div class="connection-info">
+            <div class="connection-status">
+                <span class="status-dot offline" id="connectionDot"></span>
+                <span id="connectionText">غير متصل</span>
+            </div>
+            <div id="lastChecked">آخر تحقق: لم يتم التحقق بعد</div>
         </div>
         
         <div class="model-config">
@@ -429,6 +499,7 @@
         fileLabel: document.getElementById('fileLabel'),
         fileInfo: document.getElementById('fileInfo'),
         apiKeyInput: document.getElementById('apiKeyInput'),
+        verifyApiBtn: document.getElementById('verifyApiBtn'),
         apiStatus: document.getElementById('apiStatus'),
         apiStatusText: document.getElementById('apiStatusText'),
         copyBtn: document.getElementById('copyBtn'),
@@ -441,7 +512,10 @@
         preserveTables: document.getElementById('preserveTables'),
         preserveLists: document.getElementById('preserveLists'),
         preserveFormatting: document.getElementById('preserveFormatting'),
-        preserveStructure: document.getElementById('preserveStructure')
+        preserveStructure: document.getElementById('preserveStructure'),
+        connectionDot: document.getElementById('connectionDot'),
+        connectionText: document.getElementById('connectionText'),
+        lastChecked: document.getElementById('lastChecked')
     };
 
     // بيانات التطبيق
@@ -449,7 +523,9 @@
         API_KEY: '',
         SELECTED_MODEL: 'gemini-1.5-flash',
         isProcessing: false,
-        startTime: null
+        startTime: null,
+        isApiValid: false,
+        lastCheckedTime: null
     };
 
     // تهيئة التطبيق
@@ -457,33 +533,157 @@
         // تحديث الإحصائيات
         updateStats();
         
-        // تحديث حالة API عند تحميل الصفحة
-        checkApiKey();
+        // تحديث حالة الاتصال
+        updateConnectionStatus(false);
+        
+        // تحديث وقت آخر تحقق
+        updateLastCheckedTime();
     }
 
     // التحقق من مفتاح API
     function checkApiKey() {
         const apiKey = elements.apiKeyInput.value.trim();
         
-        if (apiKey && apiKey.startsWith('AIza')) {
-            appState.API_KEY = apiKey;
-            updateApiStatus(true);
-        } else {
+        if (!apiKey) {
             appState.API_KEY = '';
-            updateApiStatus(false);
+            updateApiStatus(false, 'يرجى إدخال مفتاح API');
+            updateConnectionStatus(false);
+            return false;
+        }
+        
+        if (!apiKey.startsWith('AIza')) {
+            updateApiStatus(false, 'يجب أن يبدأ مفتاح API بـ "AIza"');
+            updateConnectionStatus(false);
+            return false;
+        }
+        
+        return true;
+    }
+
+    // التحقق من صلاحية مفتاح API
+    async function verifyApiKey(apiKey) {
+        try {
+            // تحديث واجهة المستخدم للتحقق
+            elements.verifyApiBtn.disabled = true;
+            elements.verifyApiBtn.innerHTML = '<span class="loading"></span> جاري التحقق...';
+            updateApiStatus('checking', 'جاري التحقق من صلاحية المفتاح...');
+            updateConnectionStatus('checking');
+            
+            // محاولة الاتصال بـ Google Gemini API
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
+            
+            if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('مفتاح API غير صالح أو غير مصرح به');
+                } else if (response.status === 400) {
+                    throw new Error('مفتاح API غير صحيح');
+                } else {
+                    throw new Error(`خطأ في الخادم: ${response.status}`);
+                }
+            }
+            
+            const data = await response.json();
+            
+            // التحقق من وجود نماذج Gemini
+            if (data.models && data.models.length > 0) {
+                const geminiModels = data.models.filter(m => 
+                    m.name.includes('gemini') && 
+                    m.supportedGenerationMethods?.includes('generateContent')
+                );
+                
+                if (geminiModels.length > 0) {
+                    appState.API_KEY = apiKey;
+                    appState.isApiValid = true;
+                    appState.lastCheckedTime = new Date();
+                    
+                    updateApiStatus(true, `✅ تم التحقق بنجاح! (${geminiModels.length} نموذج متاح)`);
+                    updateConnectionStatus(true);
+                    updateLastCheckedTime();
+                    
+                    // تمكين زر الاستخراج
+                    elements.btn.disabled = false;
+                    
+                    showMessage('تم التحقق من صلاحية مفتاح API بنجاح!', 'success');
+                    return true;
+                } else {
+                    throw new Error('لا توجد نماذج Gemini متاحة في هذا المفتاح');
+                }
+            } else {
+                throw new Error('لا توجد نماذج متاحة في هذا المفتاح');
+            }
+            
+        } catch (error) {
+            console.error("API verification error:", error);
+            
+            appState.API_KEY = '';
+            appState.isApiValid = false;
+            
+            updateApiStatus(false, `❌ فشل التحقق: ${error.message}`);
+            updateConnectionStatus(false);
+            updateLastCheckedTime();
+            
+            // تعطيل زر الاستخراج
+            elements.btn.disabled = true;
+            
+            showMessage(`فشل التحقق من مفتاح API: ${error.message}`, 'error');
+            return false;
+            
+        } finally {
+            // إعادة تعيين زر التحقق
+            elements.verifyApiBtn.disabled = false;
+            elements.verifyApiBtn.innerHTML = '<i class="fas fa-check-circle"></i> التحقق';
         }
     }
 
     // تحديث حالة API
-    function updateApiStatus(isValid) {
-        if (isValid && appState.API_KEY) {
+    function updateApiStatus(status, message = '') {
+        if (status === true) {
             elements.apiStatus.className = 'api-status status-valid';
-            elements.apiStatusText.innerHTML = '<i class="fas fa-check-circle"></i> مفتاح API صالح';
-            elements.btn.disabled = false;
+            elements.apiStatusText.innerHTML = `<i class="fas fa-check-circle"></i> ${message || 'مفتاح API صالح'}`;
+        } else if (status === 'checking') {
+            elements.apiStatus.className = 'api-status status-checking';
+            elements.apiStatusText.innerHTML = `<i class="fas fa-sync-alt fa-spin"></i> ${message}`;
         } else {
             elements.apiStatus.className = 'api-status status-invalid';
-            elements.apiStatusText.innerHTML = '<i class="fas fa-times-circle"></i> يرجى إضافة مفتاح API صالح';
-            elements.btn.disabled = true;
+            elements.apiStatusText.innerHTML = `<i class="fas fa-times-circle"></i> ${message || 'مفتاح API غير صالح'}`;
+        }
+    }
+
+    // تحديث حالة الاتصال
+    function updateConnectionStatus(status) {
+        if (status === true) {
+            elements.connectionDot.className = 'status-dot online';
+            elements.connectionText.textContent = 'متصل';
+            elements.connectionText.style.color = '#27ae60';
+        } else if (status === 'checking') {
+            elements.connectionDot.className = 'status-dot checking';
+            elements.connectionText.textContent = 'جاري التحقق...';
+            elements.connectionText.style.color = '#f39c12';
+        } else {
+            elements.connectionDot.className = 'status-dot offline';
+            elements.connectionText.textContent = 'غير متصل';
+            elements.connectionText.style.color = '#e74c3c';
+        }
+    }
+
+    // تحديث وقت آخر تحقق
+    function updateLastCheckedTime() {
+        if (appState.lastCheckedTime) {
+            const now = new Date();
+            const diff = Math.floor((now - appState.lastCheckedTime) / 1000);
+            
+            let timeText;
+            if (diff < 60) {
+                timeText = `قبل ${diff} ثانية`;
+            } else if (diff < 3600) {
+                timeText = `قبل ${Math.floor(diff / 60)} دقيقة`;
+            } else {
+                timeText = `قبل ${Math.floor(diff / 3600)} ساعة`;
+            }
+            
+            elements.lastChecked.textContent = `آخر تحقق: ${timeText}`;
+        } else {
+            elements.lastChecked.textContent = 'آخر تحقق: لم يتم التحقق بعد';
         }
     }
 
@@ -496,6 +696,17 @@
         elements.charCount.textContent = `عدد الأحرف: ${charCount}`;
         elements.wordCount.textContent = `عدد الكلمات: ${wordCount}`;
     }
+
+    // زر التحقق من API
+    elements.verifyApiBtn.addEventListener('click', async () => {
+        // التحقق من صيغة المفتاح أولاً
+        if (!checkApiKey()) {
+            return;
+        }
+        
+        const apiKey = elements.apiKeyInput.value.trim();
+        await verifyApiKey(apiKey);
+    });
 
     // إدارة تحميل الملفات
     elements.dropZone.addEventListener('click', () => elements.fileInput.click());
@@ -574,10 +785,8 @@
     // استخراج النصوص
     elements.btn.addEventListener('click', async () => {
         // التحقق من مفتاح API
-        checkApiKey();
-        
-        if (!appState.API_KEY) {
-            showMessage('يرجى إضافة مفتاح API أولاً', 'error');
+        if (!appState.isApiValid || !appState.API_KEY) {
+            showMessage('يرجى التحقق من صلاحية مفتاح API أولاً', 'error');
             return;
         }
         
@@ -827,7 +1036,9 @@
         
         if (error.message.includes("API key not valid") || error.message.includes("403")) {
             errorMessage = "مفتاح API غير صالح. يرجى التحقق من المفتاح وإعادة المحاولة.";
-            updateApiStatus(false);
+            appState.isApiValid = false;
+            updateApiStatus(false, "مفتاح API لم يعد صالحاً");
+            updateConnectionStatus(false);
         } else if (error.message.includes("404") || error.message.includes("not found")) {
             errorMessage = `النموذج "${elements.modelSelect.value}" غير متوفر. يرجى اختيار نموذج آخر من القائمة.`;
         } else if (error.message.includes("quota")) {
@@ -939,7 +1150,20 @@
 
     // تحديث حالة API عند تغيير مفتاح API
     elements.apiKeyInput.addEventListener('input', () => {
-        checkApiKey();
+        // إذا كان المستخدم يغير المفتاح، قم بتعطيل الحالة الصالحة
+        if (appState.isApiValid) {
+            appState.isApiValid = false;
+            updateApiStatus(false, 'تم تغيير المفتاح، يرجى التحقق مرة أخرى');
+            updateConnectionStatus(false);
+            elements.btn.disabled = true;
+        }
+    });
+
+    // التحقق التلقائي عند الضغط على Enter في حقل API
+    elements.apiKeyInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            elements.verifyApiBtn.click();
+        }
     });
 
     // تهيئة التطبيق
