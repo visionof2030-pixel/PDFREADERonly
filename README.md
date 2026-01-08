@@ -61,7 +61,7 @@
         }
         .api-config {
             display: grid;
-            grid-template-columns: 1fr auto;
+            grid-template-columns: 1fr;
             gap: 15px;
             margin-bottom: 15px;
         }
@@ -77,21 +77,6 @@
             outline: none;
             border-color: #3498db;
             box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-        }
-        .btn-save {
-            background: linear-gradient(to right, #27ae60, #219653);
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s;
-        }
-        .btn-save:hover {
-            background: linear-gradient(to right, #219653, #1e8449);
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(33, 150, 83, 0.3);
         }
         .api-status {
             padding: 10px;
@@ -114,7 +99,7 @@
         }
         .model-config {
             display: grid;
-            grid-template-columns: 1fr auto;
+            grid-template-columns: 1fr;
             gap: 15px;
             margin-top: 20px;
         }
@@ -125,21 +110,6 @@
             font-size: 16px;
             background: white;
             cursor: pointer;
-        }
-        .btn-test {
-            background: linear-gradient(to right, #3498db, #2980b9);
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s;
-        }
-        .btn-test:hover {
-            background: linear-gradient(to right, #2980b9, #1f618d);
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
         }
         .upload-area { 
             border: 3px dashed #3498db; 
@@ -336,36 +306,6 @@
             transition: width 0.3s;
             width: 0%;
         }
-        .models-list {
-            max-height: 200px;
-            overflow-y: auto;
-            margin-top: 10px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #dee2e6;
-            display: none;
-        }
-        .models-list.show {
-            display: block;
-        }
-        .model-item {
-            padding: 8px;
-            border-bottom: 1px solid #e9ecef;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .model-item:hover {
-            background: #e9ecef;
-        }
-        .model-name {
-            font-weight: bold;
-            color: #2c3e50;
-        }
-        .model-desc {
-            font-size: 12px;
-            color: #7f8c8d;
-        }
         .footer {
             text-align: center;
             margin-top: 25px;
@@ -391,9 +331,6 @@
         
         <div class="api-config">
             <input type="password" id="apiKeyInput" class="api-input" placeholder="أدخل مفتاح Google Gemini API هنا..." value="">
-            <button id="saveApiBtn" class="btn-save">
-                <i class="fas fa-save"></i> حفظ المفتاح
-            </button>
         </div>
         
         <div id="apiStatus" class="api-status status-invalid">
@@ -408,12 +345,7 @@
                 <option value="gemini-pro">Gemini Pro (للنصوص المعقدة)</option>
                 <option value="gemini-pro-vision">Gemini Pro Vision (للصور والجداول)</option>
             </select>
-            <button id="testConnectionBtn" class="btn-test hidden">
-                <i class="fas fa-wifi"></i> اختبار الاتصال
-            </button>
         </div>
-        
-        <div id="modelsList" class="models-list"></div>
         
         <div class="format-options">
             <div class="format-title">
@@ -497,7 +429,6 @@
         fileLabel: document.getElementById('fileLabel'),
         fileInfo: document.getElementById('fileInfo'),
         apiKeyInput: document.getElementById('apiKeyInput'),
-        saveApiBtn: document.getElementById('saveApiBtn'),
         apiStatus: document.getElementById('apiStatus'),
         apiStatusText: document.getElementById('apiStatusText'),
         copyBtn: document.getElementById('copyBtn'),
@@ -506,8 +437,6 @@
         wordCount: document.getElementById('wordCount'),
         processingTime: document.getElementById('processingTime'),
         modelSelect: document.getElementById('modelSelect'),
-        testConnectionBtn: document.getElementById('testConnectionBtn'),
-        modelsList: document.getElementById('modelsList'),
         progressBar: document.getElementById('progressBar'),
         preserveTables: document.getElementById('preserveTables'),
         preserveLists: document.getElementById('preserveLists'),
@@ -517,33 +446,40 @@
 
     // بيانات التطبيق
     const appState = {
-        API_KEY: localStorage.getItem('gemini_api_key') || '',
-        SELECTED_MODEL: localStorage.getItem('selected_model') || 'gemini-1.5-flash',
+        API_KEY: '',
+        SELECTED_MODEL: 'gemini-1.5-flash',
         isProcessing: false,
         startTime: null
     };
 
     // تهيئة التطبيق
     function initApp() {
-        // تحميل الإعدادات المحفوظة
-        if (appState.API_KEY) {
-            elements.apiKeyInput.value = "••••••••" + appState.API_KEY.slice(-4);
-            elements.modelSelect.value = appState.SELECTED_MODEL;
-            updateApiStatus(true);
-            elements.testConnectionBtn.classList.remove('hidden');
-        }
-        
         // تحديث الإحصائيات
         updateStats();
+        
+        // تحديث حالة API عند تحميل الصفحة
+        checkApiKey();
+    }
+
+    // التحقق من مفتاح API
+    function checkApiKey() {
+        const apiKey = elements.apiKeyInput.value.trim();
+        
+        if (apiKey && apiKey.startsWith('AIza')) {
+            appState.API_KEY = apiKey;
+            updateApiStatus(true);
+        } else {
+            appState.API_KEY = '';
+            updateApiStatus(false);
+        }
     }
 
     // تحديث حالة API
     function updateApiStatus(isValid) {
         if (isValid && appState.API_KEY) {
             elements.apiStatus.className = 'api-status status-valid';
-            elements.apiStatusText.innerHTML = '<i class="fas fa-check-circle"></i> مفتاح API صالح ومحفوظ';
+            elements.apiStatusText.innerHTML = '<i class="fas fa-check-circle"></i> مفتاح API صالح';
             elements.btn.disabled = false;
-            elements.testConnectionBtn.classList.remove('hidden');
         } else {
             elements.apiStatus.className = 'api-status status-invalid';
             elements.apiStatusText.innerHTML = '<i class="fas fa-times-circle"></i> يرجى إضافة مفتاح API صالح';
@@ -559,110 +495,6 @@
         
         elements.charCount.textContent = `عدد الأحرف: ${charCount}`;
         elements.wordCount.textContent = `عدد الكلمات: ${wordCount}`;
-    }
-
-    // حفظ مفتاح API
-    elements.saveApiBtn.addEventListener('click', () => {
-        const inputKey = elements.apiKeyInput.value.trim();
-        
-        // إذا كان الحقل يحتوي على نقاط (مفتاح مخفي)
-        if (inputKey.includes('••••')) {
-            updateApiStatus(true);
-            return;
-        }
-        
-        if (inputKey === '') {
-            // مسح المفتاح
-            localStorage.removeItem('gemini_api_key');
-            appState.API_KEY = '';
-            elements.apiKeyInput.value = '';
-            updateApiStatus(false);
-            showMessage('تم مسح مفتاح API بنجاح', 'success');
-            return;
-        }
-        
-        // التحقق من شكل مفتاح API
-        if (!inputKey.startsWith('AIza')) {
-            showMessage('يبدو أن مفتاح API غير صحيح. يجب أن يبدأ المفتاح بـ "AIza"', 'error');
-            return;
-        }
-        
-        // حفظ المفتاح الجديد
-        appState.API_KEY = inputKey;
-        appState.SELECTED_MODEL = elements.modelSelect.value;
-        
-        localStorage.setItem('gemini_api_key', appState.API_KEY);
-        localStorage.setItem('selected_model', appState.SELECTED_MODEL);
-        
-        elements.apiKeyInput.value = "••••••••" + appState.API_KEY.slice(-4);
-        updateApiStatus(true);
-        
-        showMessage('تم حفظ مفتاح API بنجاح!', 'success');
-    });
-
-    // اختبار الاتصال
-    elements.testConnectionBtn.addEventListener('click', async () => {
-        if (!appState.API_KEY) {
-            showMessage('يرجى إضافة مفتاح API أولاً', 'error');
-            return;
-        }
-        
-        elements.testConnectionBtn.innerHTML = '<span class="loading"></span> جاري الاختبار...';
-        elements.testConnectionBtn.disabled = true;
-        
-        try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${appState.API_KEY}`);
-            
-            if (!response.ok) throw new Error(`خطأ في الاتصال: ${response.status}`);
-            
-            const data = await response.json();
-            
-            if (data.models && data.models.length > 0) {
-                const geminiModels = data.models.filter(m => 
-                    m.name.includes('gemini') && 
-                    m.supportedGenerationMethods?.includes('generateContent')
-                );
-                
-                displayAvailableModels(geminiModels);
-                showMessage(`✅ تم العثور على ${geminiModels.length} نموذج متاح`, 'success');
-            } else {
-                showMessage('⚠️ لا توجد نماذج متاحة في حسابك', 'warning');
-            }
-        } catch (error) {
-            console.error("Connection test error:", error);
-            showMessage(`❌ فشل اختبار الاتصال: ${error.message}`, 'error');
-        } finally {
-            elements.testConnectionBtn.innerHTML = '<i class="fas fa-wifi"></i> اختبار الاتصال';
-            elements.testConnectionBtn.disabled = false;
-        }
-    });
-
-    // عرض النماذج المتاحة
-    function displayAvailableModels(models) {
-        elements.modelsList.innerHTML = '';
-        
-        if (models.length === 0) {
-            elements.modelsList.innerHTML = '<div style="text-align: center; padding: 20px; color: #7f8c8d;">لا توجد نماذج متاحة</div>';
-        } else {
-            models.forEach(model => {
-                const modelName = model.name.split('/').pop();
-                const div = document.createElement('div');
-                div.className = 'model-item';
-                div.innerHTML = `
-                    <div class="model-name">${modelName}</div>
-                    <div class="model-desc">${model.description || 'نموذج Gemini للذكاء الاصطناعي'}</div>
-                `;
-                div.addEventListener('click', () => {
-                    elements.modelSelect.value = modelName;
-                    appState.SELECTED_MODEL = modelName;
-                    localStorage.setItem('selected_model', modelName);
-                    elements.modelsList.classList.remove('show');
-                });
-                elements.modelsList.appendChild(div);
-            });
-        }
-        
-        elements.modelsList.classList.add('show');
     }
 
     // إدارة تحميل الملفات
@@ -737,11 +569,13 @@
         elements.copyBtn.disabled = true;
         updateStats();
         elements.processingTime.textContent = 'زمن المعالجة: 0 ثانية';
-        elements.modelsList.classList.remove('show');
     });
 
     // استخراج النصوص
     elements.btn.addEventListener('click', async () => {
+        // التحقق من مفتاح API
+        checkApiKey();
+        
         if (!appState.API_KEY) {
             showMessage('يرجى إضافة مفتاح API أولاً', 'error');
             return;
@@ -783,7 +617,7 @@
         
         try {
             const genAI = new GoogleGenerativeAI(appState.API_KEY);
-            const model = genAI.getGenerativeModel({ model: appState.SELECTED_MODEL });
+            const model = genAI.getGenerativeModel({ model: elements.modelSelect.value });
             
             // تحديث شريط التقدم
             elements.progressBar.style.width = '60%';
@@ -817,9 +651,6 @@
                     
                     // تمكين الأزرار
                     elements.copyBtn.disabled = false;
-                    
-                    // إخفاء قائمة النماذج
-                    elements.modelsList.classList.remove('show');
                     
                     // رسالة نجاح
                     showMessage('تم استخراج النصوص بنجاح مع الحفاظ على التنسيق!', 'success');
@@ -998,7 +829,7 @@
             errorMessage = "مفتاح API غير صالح. يرجى التحقق من المفتاح وإعادة المحاولة.";
             updateApiStatus(false);
         } else if (error.message.includes("404") || error.message.includes("not found")) {
-            errorMessage = `النموذج "${appState.SELECTED_MODEL}" غير متوفر. يرجى اختيار نموذج آخر من القائمة.`;
+            errorMessage = `النموذج "${elements.modelSelect.value}" غير متوفر. يرجى اختيار نموذج آخر من القائمة.`;
         } else if (error.message.includes("quota")) {
             errorMessage = "تم تجاوز حصة الاستخدام. يرجى التحقق من حسابك أو استخدام مفتاح آخر.";
         } else {
@@ -1106,23 +937,9 @@
         elements.copyBtn.disabled = !hasText;
     });
 
-    // تحديث النموذج المختار
-    elements.modelSelect.addEventListener('change', () => {
-        appState.SELECTED_MODEL = elements.modelSelect.value;
-        localStorage.setItem('selected_model', appState.SELECTED_MODEL);
-    });
-
-    // عرض/إخفاء مفتاح API
-    elements.apiKeyInput.addEventListener('focus', () => {
-        if (appState.API_KEY && elements.apiKeyInput.value.includes('••••')) {
-            elements.apiKeyInput.value = appState.API_KEY;
-        }
-    });
-    
-    elements.apiKeyInput.addEventListener('blur', () => {
-        if (appState.API_KEY && !elements.apiKeyInput.value.includes('••••')) {
-            elements.apiKeyInput.value = "••••••••" + appState.API_KEY.slice(-4);
-        }
+    // تحديث حالة API عند تغيير مفتاح API
+    elements.apiKeyInput.addEventListener('input', () => {
+        checkApiKey();
     });
 
     // تهيئة التطبيق
